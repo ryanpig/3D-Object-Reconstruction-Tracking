@@ -186,6 +186,7 @@ void Scene3DRenderer::processForeground(
 	}
 	cout << "-----End of image process-----" << endl;
 
+	imshow("test", foreground);
 	
 		camera->setForegroundImage(foreground);
 }

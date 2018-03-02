@@ -55,8 +55,8 @@ public:
 	virtual ~Reconstructor();
 
 	void update();
-	void kmean(); //clustering voxels  -> centers & labelled voxels
-
+	void kmean();						//clustering voxels  -> centers & labelled voxels
+	void CreateColorModel();     		//Create color model for each person for each veiwe
 	const std::vector<cv::Point2f>& getClusterCenters() const
 	{
 		return m_centers;

@@ -198,6 +198,11 @@ void writeCSV(string filename, Mat m)
 	myfile << cv::format(m, cv::Formatter::FMT_CSV) << std::endl;
 	myfile.close();
 }
+
+/**
+* Convert the location (x,y) of each voxel into Point2f 
+* Clustering visible voxels by kmean
+*/
 void Reconstructor::kmean() {
 	//m_voxels_amount
 	Mat data(m_visible_voxels.size(), 1, CV_32FC2);
@@ -222,6 +227,7 @@ void Reconstructor::kmean() {
 		Voxel* voxel = m_visible_voxels[j];
 		voxel->group_number = bestLabels.at<int>(j,0);
 	}
+	//Save the centers
 	m_centers.clear();
 	for (int k = 0; k < centers.rows; k++) {
 		Point2f tmp = Point2f(centers.at<float>(k, 0), centers.at<float>(k, 1));
@@ -234,6 +240,60 @@ void Reconstructor::kmean() {
 
 
 }
+
+/**
+* Create color model for each person in each camera
+* visible_voxels vector
+*/
+void Reconstructor::CreateColorModel() {
+	Mat t_frame;
+	vector<Mat> bgr_planes;
+
+	for (size_t c = 0; c < m_cameras.size(); ++c)
+	{
+		//Get color of pixels based on the labels 
+		t_frame = m_cameras[c]->getFrame(); //get the frame from camera x
+
+
+		for (int j = 0; j < m_visible_voxels.size(); j++) {
+			Voxel* voxel = m_visible_voxels[j];
+			if (voxel->group_number == 0) {
+				const Point point = voxel->camera_projection[c];
+				//access the color of singe pixel and add it to matrix
+				//bgr_planes[0].at<int>(0,   t_frame.at<Vec3b>(point.y,point.x)[0];
+
+			}
+		}
+	
+	}
+
+	//Get RGB of a pixel
+	//cv::Mat image = ...do some stuff...;
+	//image.at<cv::Vec3b>(y, x); gives you the RGB(it might be ordered as BGR) vector of type cv::Vec3b
+
+	//	image.at<cv::Vec3b>(y, x)[0] = newval[0];
+	//image.at<cv::Vec3b>(y, x)[1] = newval[1];
+	//image.at<cv::Vec3b>(y, x)[2] = newval[2];
+
+	//Create ColorHistogram
+	/// Separate the image in 3 places ( B, G and R )
+	//vector<Mat> bgr_planes;
+	//split(src, bgr_planes);
+	/// Establish the number of bins
+	int histSize = 256;
+	/// Set the ranges ( for B,G,R) )
+	float range[] = { 0, 256 };
+	const float* histRange = { range };
+	bool uniform = true; bool accumulate = false;
+	Mat b_hist, g_hist, r_hist;
+	/// Compute the histograms:
+	/*calcHist(&bgr_planes[0], 1, 0, Mat(), b_hist, 1, &histSize, &histRange, uniform, accumulate);
+	calcHist(&bgr_planes[1], 1, 0, Mat(), g_hist, 1, &histSize, &histRange, uniform, accumulate);
+	calcHist(&bgr_planes[2], 1, 0, Mat(), r_hist, 1, &histSize, &histRange, uniform, accumulate);
+	*/
+
+}
+
 
 
 
