@@ -341,7 +341,8 @@ void Glut::keyboard(
 			SaveImg();
 		}
 		else if (key == 'k') {
-			scene3d.getReconstructor().kmean();
+			//scene3d.getReconstructor().kmean();
+			scene3d.getReconstructor().CreateColorModel();
 
 		
 		}

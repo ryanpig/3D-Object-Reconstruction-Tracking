@@ -15,7 +15,8 @@
 #include <omp.h>
 #include "../utilities/General.h"
 #include <fstream>
-
+#include "opencv2/highgui/highgui.hpp"
+#include "opencv2/imgproc/imgproc.hpp"
 
 using namespace std;
 using namespace cv;
@@ -31,7 +32,7 @@ Reconstructor::Reconstructor(
 		const vector<Camera*> &cs) :
 				m_cameras(cs),
 				m_height(2048),
-				m_step(64)
+				m_step(32)
 {
 	for (size_t c = 0; c < m_cameras.size(); ++c)
 	{
@@ -212,7 +213,8 @@ void Reconstructor::kmean() {
 		data.at<Point2f>(i,0) = Point2f(voxel->x, voxel->y);
 		//data.push_back(Point2f(voxel->x, voxel->y));
 	}
-	
+	//K-mean 
+	//https://docs.opencv.org/3.0-beta/doc/py_tutorials/py_ml/py_kmeans/py_kmeans_opencv/py_kmeans_opencv.html
 	Mat centers, bestLabels;
 	TermCriteria criteria;
 	criteria.epsilon = 0.1;
@@ -237,7 +239,7 @@ void Reconstructor::kmean() {
 	//writeCSV("xy.csv", data);
 	//writeCSV("label.csv", bestLabels);
 	//writeCSV("center.csv", centers);
-
+	//CreateColorModel();
 
 }
 
@@ -246,56 +248,139 @@ void Reconstructor::kmean() {
 * visible_voxels vector
 */
 void Reconstructor::CreateColorModel() {
-	Mat t_frame;
-	vector<Mat> bgr_planes;
-
-	for (size_t c = 0; c < m_cameras.size(); ++c)
-	{
-		//Get color of pixels based on the labels 
-		t_frame = m_cameras[c]->getFrame(); //get the frame from camera x
-
-
-		for (int j = 0; j < m_visible_voxels.size(); j++) {
-			Voxel* voxel = m_visible_voxels[j];
-			if (voxel->group_number == 0) {
-				const Point point = voxel->camera_projection[c];
-				//access the color of singe pixel and add it to matrix
-				//bgr_planes[0].at<int>(0,   t_frame.at<Vec3b>(point.y,point.x)[0];
-
-			}
-		}
+	//Set the frame to be processed. (Now, the frame is based on when we press key "k")
 	
+	vector<Mat> allImgs;
+	Mat displayImg;
+	for (int m = 0; m < m_cameras.size(); m++) {
+
+		//Build BGR matrix by querying pixels, based on grouping number and camera view
+		vector<Mat> bgr_planes0, bgr_planes1, bgr_planes2, bgr_planes3;
+		QueryPixelsByGroup(0, m, bgr_planes0);  //group 0 , camera m 
+		QueryPixelsByGroup(1, m, bgr_planes1);
+		QueryPixelsByGroup(2, m, bgr_planes2);
+		QueryPixelsByGroup(3, m, bgr_planes3);
+
+		//Calculate ColorHistogram
+		vector<Mat> colorModel0, colorModel1, colorModel2, colorModel3;
+		GenColorModel(bgr_planes0, colorModel0);
+		GenColorModel(bgr_planes1, colorModel1);
+		GenColorModel(bgr_planes2, colorModel2);
+		GenColorModel(bgr_planes3, colorModel3);
+
+		Mat histImage0, histImage1, histImage2, histImage3;
+		// Display Color Histograms
+		GenHistogramImg(colorModel0, histImage0);
+		GenHistogramImg(colorModel1, histImage1);
+		GenHistogramImg(colorModel2, histImage2);
+		GenHistogramImg(colorModel3, histImage3);
+		Mat LImg, RImg, allImg_tmp,tmp;
+		hconcat(histImage0, histImage1, LImg);
+		hconcat(histImage2, histImage3, RImg);
+		hconcat(LImg, RImg, allImg_tmp);
+		allImgs.push_back(allImg_tmp);
 	}
+		vconcat(allImgs, displayImg);
 
-	//Get RGB of a pixel
-	//cv::Mat image = ...do some stuff...;
-	//image.at<cv::Vec3b>(y, x); gives you the RGB(it might be ordered as BGR) vector of type cv::Vec3b
+	namedWindow("Color Histograms", CV_WINDOW_NORMAL);
+	imshow("Color Histograms", displayImg);
+	waitKey(0);
+}
 
-	//	image.at<cv::Vec3b>(y, x)[0] = newval[0];
-	//image.at<cv::Vec3b>(y, x)[1] = newval[1];
-	//image.at<cv::Vec3b>(y, x)[2] = newval[2];
+/*
+Access BGR of single pixel and add it to vector<uchar>
+https://docs.opencv.org/2.4.13.2/doc/user_guide/ug_mat.html
+create Mat based on vector<uchar> 
+http://answers.opencv.org/question/81831/convert-stdvectordouble-to-mat-and-show-the-image/
 
-	//Create ColorHistogram
-	/// Separate the image in 3 places ( B, G and R )
+*/
+//const vector<Mat>&
+void Reconstructor::QueryPixelsByGroup(int groupNum, int cameraNo, vector<Mat>& bgr_planes) {
 	//vector<Mat> bgr_planes;
-	//split(src, bgr_planes);
-	/// Establish the number of bins
+	vector<uchar> bvec0, gvec0, rvec0;
+	Mat img = m_cameras[cameraNo]->getFrame(); //Get the 2D image from camera x
+	for (int j = 0; j < m_visible_voxels.size(); j++) {
+		Voxel* voxel = m_visible_voxels[j];
+		if (voxel->group_number == groupNum) {
+			const Point point = voxel->camera_projection[cameraNo]; 
+			//Access BGR of single pixel and add it to matrix												 
+			bvec0.push_back(img.at<Vec3b>(point)[0]);
+			gvec0.push_back(img.at<Vec3b>(point)[1]);
+			rvec0.push_back(img.at<Vec3b>(point)[2]);
+		}
+	}
+	Mat m1, m2, m3;
+	m1 = Mat(1, bvec0.size(), CV_8UC1);		bgr_planes.push_back(m1);
+	m2 = Mat(1, gvec0.size(), CV_8UC1);		bgr_planes.push_back(m2);
+	m3 = Mat(1, rvec0.size(), CV_8UC1);		bgr_planes.push_back(m3);
+	memcpy(bgr_planes[0].data, bvec0.data(), bvec0.size() * sizeof(uchar));
+	memcpy(bgr_planes[1].data, gvec0.data(), gvec0.size() * sizeof(uchar));
+	memcpy(bgr_planes[2].data, rvec0.data(), rvec0.size() * sizeof(uchar));
+	//return bgr_planes;
+}
+/*
+Calculate Color Historgram from a given RGB matrix
+https://docs.opencv.org/2.4/doc/tutorials/imgproc/histograms/histogram_calculation/histogram_calculation.html#histogram-calculation
+
+*/
+void Reconstructor::GenColorModel(vector<Mat>& bgr_planes, vector<Mat>& colorModel) {
+	// Establish the number of bins
 	int histSize = 256;
-	/// Set the ranges ( for B,G,R) )
+	// Set the ranges ( for B,G,R) )
 	float range[] = { 0, 256 };
 	const float* histRange = { range };
 	bool uniform = true; bool accumulate = false;
 	Mat b_hist, g_hist, r_hist;
-	/// Compute the histograms:
-	/*calcHist(&bgr_planes[0], 1, 0, Mat(), b_hist, 1, &histSize, &histRange, uniform, accumulate);
-	calcHist(&bgr_planes[1], 1, 0, Mat(), g_hist, 1, &histSize, &histRange, uniform, accumulate);
-	calcHist(&bgr_planes[2], 1, 0, Mat(), r_hist, 1, &histSize, &histRange, uniform, accumulate);
-	*/
+	//vector<Mat> colorModel
+	// Compute the histograms:
+	calcHist( &(bgr_planes)[0], 1, 0, Mat(), b_hist, 1, &histSize, &histRange, uniform, accumulate);
+	calcHist( &(bgr_planes)[1], 1, 0, Mat(), g_hist, 1, &histSize, &histRange, uniform, accumulate);
+	calcHist(&(bgr_planes)[2], 1, 0, Mat(), r_hist, 1, &histSize, &histRange, uniform, accumulate);
+	colorModel.push_back(b_hist);
+	colorModel.push_back(g_hist);
+	colorModel.push_back(r_hist);
 
 }
 
 
+void Reconstructor::GenHistogramImg(vector<Mat>& colorModel,Mat& histImageout) {
+	Mat b_hist = colorModel[0];
+	Mat g_hist = colorModel[1];
+	Mat r_hist = colorModel[2];
+	//Configuration
+	int histSize = 256; 
+	int hist_w = 512; int hist_h = 400;
+	int bin_w = cvRound((double)hist_w / histSize);
 
+	Mat histImage(hist_h, hist_w, CV_8UC3, Scalar(0, 0, 0));
+
+	// Normalize the result to [ 0, histImage.rows ]
+	normalize(b_hist, b_hist, 0, histImage.rows, NORM_MINMAX, -1, Mat());
+	normalize(g_hist, g_hist, 0, histImage.rows, NORM_MINMAX, -1, Mat());
+	normalize(r_hist, r_hist, 0, histImage.rows, NORM_MINMAX, -1, Mat());
+
+	/// Draw for each channel
+	for (int i = 1; i < histSize; i++)
+	{
+		line(histImage, Point(bin_w*(i - 1), hist_h - cvRound(b_hist.at<float>(i - 1))),
+			Point(bin_w*(i), hist_h - cvRound(b_hist.at<float>(i))),
+			Scalar(255, 0, 0), 2, 8, 0);
+		line(histImage, Point(bin_w*(i - 1), hist_h - cvRound(g_hist.at<float>(i - 1))),
+			Point(bin_w*(i), hist_h - cvRound(g_hist.at<float>(i))),
+			Scalar(0, 255, 0), 2, 8, 0);
+		line(histImage, Point(bin_w*(i - 1), hist_h - cvRound(r_hist.at<float>(i - 1))),
+			Point(bin_w*(i), hist_h - cvRound(r_hist.at<float>(i))),
+			Scalar(0, 0, 255), 2, 8, 0);
+	}
+	histImageout = histImage;
+	/*
+	/// Display
+	namedWindow("calcHist Demo", CV_WINDOW_AUTOSIZE);
+	imshow("calcHist Demo", histImage);
+
+	waitKey(0);
+	*/
+}
 
 
 } /* namespace nl_uu_science_gmt */

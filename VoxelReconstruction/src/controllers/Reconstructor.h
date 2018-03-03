@@ -11,8 +11,12 @@
 #include <opencv2/core/core.hpp>
 #include <stddef.h>
 #include <vector>
+#include <opencv2/core/mat.hpp>
 
 #include "Camera.h"
+using namespace std;
+using namespace cv;
+
 
 namespace nl_uu_science_gmt
 {
@@ -55,8 +59,14 @@ public:
 	virtual ~Reconstructor();
 
 	void update();
-	void kmean();						//clustering voxels  -> centers & labelled voxels
-	void CreateColorModel();     		//Create color model for each person for each veiwe
+
+	//New added function in order to cluster voxels and generate color models
+	void kmean();						//clustering voxels 
+	void CreateColorModel();			//Create color model for each person for each view
+	void QueryPixelsByGroup(int, int, vector<Mat>&);
+	void GenColorModel(vector<Mat>&, vector<Mat>&);
+	void GenHistogramImg(vector<Mat>&, Mat&);
+
 	const std::vector<cv::Point2f>& getClusterCenters() const
 	{
 		return m_centers;
