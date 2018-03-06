@@ -373,7 +373,7 @@ void writeCSV(string filename, Mat m)
 }
 
 /**
-* Convert the location (x,y) of each voxel into Point2f 
+* Convert the location (x,y) of each voxel into Point2f
 * Clustering visible voxels by kmean
 */
 void Reconstructor::kmean() {
@@ -382,7 +382,7 @@ void Reconstructor::kmean() {
 	//vector<Point2f> data;
 	for (int i = 0; i < m_visible_voxels.size(); i++) {
 		Voxel* voxel = m_visible_voxels[i];
-		data.at<Point2f>(i,0) = Point2f(voxel->x, voxel->y);
+		data.at<Point2f>(i, 0) = Point2f(voxel->x, voxel->y);
 		//data.push_back(Point2f(voxel->x, voxel->y));
 	}
 	//K-mean 
@@ -390,33 +390,189 @@ void Reconstructor::kmean() {
 	Mat centers, bestLabels;
 	TermCriteria criteria;
 	criteria.epsilon = 0.1;
-	criteria.maxCount =1000 ;
+	criteria.maxCount = 1000;
 	criteria.type = criteria.EPS;
-	int attempts = 40;
-	int flags = KMEANS_RANDOM_CENTERS;
-	//loop , check centers, 
-	kmeans( data, 4, bestLabels, criteria, attempts, flags, centers);
+	bool centersfound = false;
+	int attempts = 3; //1;
+	int maxRetries = 10;
+	int flags =  KMEANS_PP_CENTERS; //KMEANS_RANDOM_CENTERS;
 
+
+	//uncomment from here to disable new code
+	const int centersToStore = 4;
+	Point2f centerStorage[centersToStore];
+	int centerCountStorage[centersToStore];
+	for (int i = 0; i < centersToStore; i++)
+	{
+		centerStorage[i] = Point2f(0, 0);
+		centerCountStorage[i] = 0;
+	}
+	
+	//require finetuning
+	const double radius = 300;
+	const int minVoxelsPerCluster = 300;
+
+	//execute kmeans a couple of times to find clusters and assess how small they are
+	for (int retries = 0; retries < maxRetries; retries++)
+	{
+		bool centervalid[] = { true, true, true, true };
+
+		//for now assume we can find 2
+		kmeans(data, 2, bestLabels, criteria, attempts, flags, centers);
+
+		std::vector<cv::Point2i> conflicts;
+		int legalVoxels [] = { 0, 0, 0, 0 }; //we'll find at most 4 clusters
+
+		//start by checking whether centers overlap
+		for (int k = 0; k < centers.rows; k++) {
+			Point2f centerA = Point2f(centers.at<float>(k, 0), centers.at<float>(k, 1));
+			for (int j = k + 1; j < centers.rows; j++)
+			{
+				Point2f centerB = Point2f(centers.at<float>(j, 0), centers.at<float>(j, 1));
+				double dist = cv::norm(centerA - centerB);
+				if (dist < radius * 2)
+					conflicts.push_back(Point2i(k, j));
+			}
+		}
+
+		//calculate amount of voxels withing range r (label them!)
+		for (int j = 0; j < m_visible_voxels.size(); j++) {
+			//calculate distance between voxel and its cluster center
+			Voxel* voxel = m_visible_voxels[j];
+			Point2f p = ((float)(voxel->x), (float)(voxel->y));
+			int bestlabel = bestLabels.at<int>(j, 0);
+			for (int k = 0; k < centers.rows; k++) {
+				Point2f centerP = Point2f(centers.at<float>(k, 0), centers.at<float>(k, 1));
+				double dist = cv::norm(p - centerP);
+
+				//up the center's counter if the distance is within bounds
+				if (dist < radius)
+					legalVoxels[k]++;
+			}
+		}
+
+		//dismiss centers with #voxels < V
+		for (int k = 0; k < centers.rows; k++) {
+			if (legalVoxels[k] >= minVoxelsPerCluster)
+				centervalid[k] = false;
+		}
+
+		//of the remaining conflicts, remove the lesser populated center
+		for (int k = 0; k < conflicts.size(); k++)
+		{
+			Point2i c = conflicts[k];
+			if (centervalid[c.x] && centervalid[c.y])
+			{
+				if (legalVoxels[c.x] > legalVoxels[c.y])
+					centervalid[c.y] = false;
+				else
+					centervalid[c.x] = false;
+			}
+		}
+
+		//compare centers to currently stored centers, if two are too close, invalidate the oen with the least voxels
+		for (int k = 0; k < centers.rows; k++) {
+			Point2f centerA = Point2f(centers.at<float>(k, 0), centers.at<float>(k, 1));
+			bool hasbeenadded = false;
+			for (int j = 0; j < centersToStore; j++)
+			{
+				if (hasbeenadded)
+					break;
+				double dist = cv::norm(centerA - centerStorage[j]);
+				if (dist < 2 * radius)
+				{
+					if (legalVoxels[k] > centerCountStorage[j])
+					{
+						centerStorage[j] = Point2f(0, 0);
+						centerCountStorage[j] = 0;
+					}
+					else
+					{
+						centers.at<float>(k, 0) = 0;
+						centers.at<float>(k, 1) = 0;
+						legalVoxels[k] = 0;
+						centervalid[k] = false;
+					}
+				}
+			}
+		}
+
+		//store remaining centers and how much voxels are within their range
+		for (int i = 0; i < centers.rows; i++)
+		{
+			bool hasBeenPlaced = false;
+			for(int j = 0; j < centersToStore; j++)
+			{
+				if (hasBeenPlaced)
+					break;
+				if (centerStorage[j].x == 0 && centerStorage[j].y == 0)
+				{
+					centerStorage[j].x = centers.at<float>(i, 0);
+					centerStorage[j].y = centers.at<float>(i, 1);
+					centerCountStorage[j] = legalVoxels[i];
+					hasBeenPlaced = true;
+				}
+			}
+		}
+	}
+
+	//With the remaining centers, calculate their voxels again, then finish up
+	for (int i = 0; i < m_visible_voxels.size(); i++) {
+		double bestDist = 9000;
+		int bestCenter = 9000;
+		Voxel* voxel = m_visible_voxels[i];
+
+		for (int j = 0; j < centersToStore; j++)
+		{
+			double dist = cv::norm(Point2f(voxel->x, voxel->y) - centerStorage[j]);
+			if (dist < bestDist)
+			{
+				bestDist = dist;
+				bestCenter = j;
+			}
+		}
+		if (bestDist < radius)
+			voxel->group_number = bestCenter;
+		else
+			voxel->group_number = 5;
+	}
+
+	//Save the centers
+	m_centers.clear();
+	for (int k = 0; k < centersToStore; k++) {
+		if (!(centerStorage[k].x == 0 && centerStorage[k].y == 0))
+			m_centers.push_back(centerStorage[k]);
+	}
+	//uncomment until here to disable new code
+
+	//uncomment the section below for the regular kmean function
+	/*
+	kmeans(data, 4, bestLabels, criteria, attempts, flags, centers);
+	
 	//label each voxel 
 	for (int j = 0; j < m_visible_voxels.size(); j++) {
 		Voxel* voxel = m_visible_voxels[j];
-		voxel->group_number = bestLabels.at<int>(j,0);
+		voxel->group_number = bestLabels.at<int>(j, 0);
 	}
+
+
 	//Save the centers
+
 	m_centers.clear();
+	
 	for (int k = 0; k < centers.rows; k++) {
 		Point2f tmp = Point2f(centers.at<float>(k, 0), centers.at<float>(k, 1));
 		m_centers.push_back(tmp);
-		if (m_offline_flag == true) {
-			m_Trajectories[k].push_back(tmp); //should be modified after mapping
-		}
 	}
+	*/
+
+
 
 	//writeCSV("xy.csv", data);
 	//writeCSV("label.csv", bestLabels);
 	//writeCSV("center.csv", centers);
 	//CreateColorModel();
-	
+
 }
 
 
