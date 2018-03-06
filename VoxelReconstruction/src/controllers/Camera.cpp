@@ -265,10 +265,10 @@ bool Camera::detExtrinsics(
 	if (fs.isOpened())
 	{
 		Mat camera_matrix_f, distortion_coeffs_f;
-		//fs["CameraMatrix"] >> camera_matrix_f;
-		//fs["DistortionCoeffs"] >> distortion_coeffs_f;
-		fs["camera_matrix"] >> camera_matrix_f;  //Naming should match the node name in XML file.  2/19/2018
-		fs["distortion_coefficients"] >> distortion_coeffs_f;
+		fs["CameraMatrix"] >> camera_matrix_f;
+		fs["DistortionCoeffs"] >> distortion_coeffs_f;
+		//fs["camera_matrix"] >> camera_matrix_f;  //Naming should match the node name in XML file.  2/19/2018
+		//fs["distortion_coefficients"] >> distortion_coeffs_f;
 
 		camera_matrix_f.convertTo(camera_matrix, CV_32F);
 		distortion_coeffs_f.convertTo(distortion_coeffs, CV_32F);

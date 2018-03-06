@@ -647,7 +647,7 @@ void Glut::display()
 		drawArcball();
 
 	drawVoxels();
-
+	
 	if (scene3d.isShowOrg())
 		drawWCoord();
 	if (scene3d.isShowInfo())
@@ -672,8 +672,25 @@ void Glut::update(
 {
 	char key = waitKey(10);
 	keyboard(key, 0, 0);  // call glut key handler :)
-
 	Scene3DRenderer& scene3d = m_Glut->getScene3d();
+	bool offline_flag = scene3d.getReconstructor().getOfflineFlag();
+	bool offline_from_file = scene3d.getReconstructor().getOfflineFlagFromeFile();
+	//Once offline color model construction
+	if (!offline_flag) {
+		if (offline_from_file) { // Read offline CMs from file. 
+			scene3d.getReconstructor().ReadCMsFromFile();
+			scene3d.getReconstructor().setOfflineFlag();
+		}
+		else { 
+			scene3d.setCurrentFrame(0); // Pick up a frame to build the color models
+			scene3d.processFrame();
+			scene3d.getReconstructor().update();
+			scene3d.getReconstructor().offlineCMsBuild();
+			scene3d.getReconstructor().setOfflineFlag();
+		}
+	}
+
+
 	if (scene3d.isQuit())
 	{
 		// Quit signaled
@@ -703,7 +720,14 @@ void Glut::update(
 		// If the current frame is different from the last iteration update stuff
 		scene3d.processFrame();
 		scene3d.getReconstructor().update();
+		//Identification (K-mean, Build CMs, Comparison, Mapping)
+		scene3d.getReconstructor().onlineCMsBuild();
+
 		scene3d.setPreviousFrame(scene3d.getCurrentFrame());
+		
+		//To skip 10 frames
+		scene3d.setCurrentFrame(scene3d.getCurrentFrame() + 9);
+
 	}
 	else if (scene3d.getHThreshold() != scene3d.getPHThreshold() || scene3d.getSThreshold() != scene3d.getPSThreshold()
 			|| scene3d.getVThreshold() != scene3d.getPVThreshold())
@@ -735,6 +759,25 @@ void Glut::update(
 		canvas = scene3d.getCameras()[scene3d.getPreviousCamera()]->getFrame();
 		foreground = scene3d.getCameras()[scene3d.getPreviousCamera()]->getForegroundImage();
 	}
+	// Show four frames in the windows.  (Pick up frame)
+	/*
+	Mat f1, f2, f3, f4;
+	Mat tmp1, tmp2;
+	Mat all;
+	vector<Mat> all_imgs;
+	f1 = scene3d.getCameras()[0]->getFrame();
+	f2 = scene3d.getCameras()[1]->getFrame();
+	f3 = scene3d.getCameras()[2]->getFrame();
+	f4 = scene3d.getCameras()[3]->getFrame();
+	hconcat(f1, f2, tmp1);
+	hconcat(f3, f4, tmp2);
+	all_imgs.push_back(tmp1);
+	all_imgs.push_back(tmp2);
+
+	vconcat(all_imgs, all);
+	namedWindow("four camera views", 1);
+	imshow("four camera views", all);
+	*/
 
 	// Concatenate the video frame with the foreground image (of set camera)
 	if (!canvas.empty() && !foreground.empty())
@@ -955,12 +998,16 @@ void Glut::drawVoxels()
 	glBegin(GL_POINTS);
 
 	vector<Reconstructor::Voxel*> voxels = m_Glut->getScene3d().getReconstructor().getVisibleVoxels();
-	std::vector<cv::Point2f> centers = m_Glut->getScene3d().getReconstructor().getClusterCenters();
+	//vector<int> map = m_Glut->getScene3d().getReconstructor().getMappingTable();
+	//black, grey, color, blue
 
 	for (size_t v = 0; v < voxels.size(); v++)
 	{
+		//glColor4f(0.5f, 0.5f, 0.5f, 0.5f);
+		
 		//draw clustering voxels 
 		glPointSize(2.0f); // 2.0f
+
 		if (voxels[v]->group_number == 0)
 			glColor4f(0.5f, 0.2f, 0.8f, 0.5f);
 		else if(voxels[v]->group_number == 1)
@@ -970,21 +1017,58 @@ void Glut::drawVoxels()
 		else if (voxels[v]->group_number == 3)
 			glColor4f(0.0f, 0.0f, 1.0f, 0.5f);
 		else
-			glColor4f(0.5f, 0.5f, 0.5f, 0.5f);
+			glColor4f(0.0f, 0.0f, 0.0f, 0.0f);
 
-		//glColor4f(0.25f, 0.6f, 1.0f, 0.7f);
 		glVertex3f((GLfloat) voxels[v]->x, (GLfloat) voxels[v]->y, (GLfloat) voxels[v]->z);
 	}
-	//draw the centers
+	glEnd();
+	glPopMatrix();
+
+	//start to draw Trajs. 
+	drawTrajectories();
+
+}
+
+/**
+  * Draw trajectories for each person
+**/
+void Glut::drawTrajectories()
+{
+	glPushMatrix();
+
+	// apply default translation
+	glTranslatef(0, 0, 0);
+	glPointSize(8.0f); // 2.0f
+	glBegin(GL_POINTS);
+
+	vector<vector<Point2f>> Traj = m_Glut->getScene3d().getReconstructor().getTrajectories();
+		
 	glColor4f(1.0f, 1.0f, 0.0f, 0.5f);
-	glPointSize(5.0f); // 2.0f
-	for (int k = 0; k < centers.size(); k++) {
-		glVertex3f((GLfloat)centers[k].x, (GLfloat)centers[k].y, 0);
+
+	for (size_t v = 0; v < Traj.size(); v++)
+	{
+		//glColor4f(0.5f, 0.5f, 0.5f, 0.5f);
+
+		if (v == 0 ) //black man
+			glColor4f(0.1f, 0.1f, 0.1f, 1.0f);
+		else if (v == 1) //color man
+			glColor4f(0.3f, 0.7f, 0.7f, 1.0f);
+		else if (v == 2) //grey man
+			glColor4f(0.3f, 0.3f, 0.3f, 0.8f);
+		else if (v== 3) //blue man
+			glColor4f(1.0f, 0.2f, 0.2f, 0.8f);
+
+		for (size_t k = 0; k < Traj[v].size(); k++) {
+			glVertex3f((GLfloat)Traj[v][k].x, (GLfloat)Traj[v][k].y, (GLfloat) 0.0f);
+		}
 	}
 
 	glEnd();
 	glPopMatrix();
 }
+
+
+
 
 /**
  * Draw origin into scene

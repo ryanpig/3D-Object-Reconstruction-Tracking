@@ -162,6 +162,18 @@ void Scene3DRenderer::processForeground(
 	threshold(tmp, background, m_v_threshold, 255, CV_THRESH_BINARY);
 	bitwise_or(foreground, background, foreground);
 
+	//Background Processing only for offline color model construction
+	if (!(getReconstructor().getOfflineFlag())){
+		Erosion(0, 0, foreground, 0, 1, 1);
+		Erosion(0, 0, foreground, 1, 1, 1);
+		Dilation(0, 0, foreground, 0, 1, 1);
+		Dilation(0, 0, foreground, 1, 1, 1);
+		Dilation(0, 0, foreground, 1, 1, 1);
+
+	}
+
+
+
 	// Retrive and process the action list. (Corresponding Keys:5,6,7, and 8)
 	for (int j = 0; j < m_history_type.size(); j++) {
 		string type = "";
@@ -187,8 +199,19 @@ void Scene3DRenderer::processForeground(
 	cout << "-----End of image process-----" << endl;
 
 	//imshow("test", foreground); //Debug
-	
+	// All white foreground for debuging. 
+	if (camera->getId() == 5) {
+		Mat pseudoImg(foreground.rows, foreground.cols, CV_8UC3, Scalar(255,255,255));
+		Mat p1;
+		cvtColor(pseudoImg, p1, CV_RGB2GRAY);
+		camera->setForegroundImage(p1);
+	}
+	else {
+
 		camera->setForegroundImage(foreground);
+	}
+
+
 }
 
 /**
@@ -340,6 +363,13 @@ void Scene3DRenderer::HistoryUndo() {
 	m_history_size.pop_back();
 	m_history_iter.pop_back();
 }
+
+
+
+
+
+
+
 
 
 } /* namespace nl_uu_science_gmt */

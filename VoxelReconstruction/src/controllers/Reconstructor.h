@@ -49,8 +49,14 @@ private:
 
 	std::vector<Voxel*> m_voxels;           // Pointer vector to all voxels in the half-space
 	std::vector<Voxel*> m_visible_voxels;   // Pointer vector to all visible voxels
-	
-	std::vector<cv::Point2f> m_centers;   // clustering centers. 
+	std::vector<vector<Mat>> m_colorModels; // color models offline. 
+	std::vector<vector<Mat>> m_colorModels_on; // color models online. 
+	std::vector<cv::Point2f> m_centers;     // clustering centers. 
+	vector<vector<Point2f>> m_Trajectories; // Trajectories for four clustering centers
+	bool m_offline_flag;					// If false, start to build offlice color models.
+	bool m_offline_ModelFromFile;			// If true, the offline color models will be retrieved from file. 
+	vector<int> m_mapping;					// mapping table to identify which group belongs to which person
+
 	void initialize();
 
 public:
@@ -60,12 +66,45 @@ public:
 
 	void update();
 
-	//New added function in order to cluster voxels and generate color models
+	//[Clustering & Building color models & Similarity ]
 	void kmean();						//clustering voxels 
 	void CreateColorModel();			//Create color model for each person for each view
-	void QueryPixelsByGroup(int, int, vector<Mat>&);
-	void GenColorModel(vector<Mat>&, vector<Mat>&);
-	void GenHistogramImg(vector<Mat>&, Mat&);
+	void QueryPixelsByGroup(int, int, vector<Mat>&, vector<Mat>&); 
+	void GenColorModel(vector<Mat>&, vector<Mat>&); 
+	void GenHistogramImg(vector<Mat>, Mat&);	//Generate single 3-ch Histogram image. 
+	void CompareColorModels(vector<vector<Mat>>&); // Given color models, it calculate the similarity of each possible pair.
+	int CompareColorModels_Online(vector<vector<Mat>>&, vector<Mat>);
+	//[Offline]
+	void offlineCMsBuild();				// step by step, to build the offline color models
+	void CreateCMsOffline();		    // Loop each view of camera, user has to pick up best color model for each person. The result is saved into a file. 
+	void ReadCMsFromFile();				// Read color models from the file. 
+	//[Online]
+	void onlineCMsBuild();				// step by step, to build the online color models
+	void MappingUpdate();				//update group number of each voxel by the mapping table
+
+	const vector<int>& getMappingTable() {
+		return m_mapping;
+	}
+
+
+	bool getOfflineFlagFromeFile() const {
+		return m_offline_ModelFromFile;
+	}
+
+	void setOfflineFlag()
+	{
+		m_offline_flag = true;
+	}
+
+	bool getOfflineFlag() const
+	{
+		return 	m_offline_flag;
+	}
+
+	const std::vector<vector<cv::Point2f>>& getTrajectories() const
+	{
+		return 	m_Trajectories;
+	}
 
 	const std::vector<cv::Point2f>& getClusterCenters() const
 	{
