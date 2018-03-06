@@ -56,7 +56,7 @@ private:
 	bool m_offline_flag;					// If false, start to build offlice color models.
 	bool m_offline_ModelFromFile;			// If true, the offline color models will be retrieved from file. 
 	vector<int> m_mapping;					// mapping table to identify which group belongs to which person
-
+	int m_count;		// for export trajectories
 	void initialize();
 
 public:
@@ -81,6 +81,7 @@ public:
 	//[Online]
 	void onlineCMsBuild();				// step by step, to build the online color models
 	void MappingUpdate();				//update group number of each voxel by the mapping table
+	void ShowTrajectories();			//Drawing trajectories in an image matrix (file.)
 
 	const vector<int>& getMappingTable() {
 		return m_mapping;

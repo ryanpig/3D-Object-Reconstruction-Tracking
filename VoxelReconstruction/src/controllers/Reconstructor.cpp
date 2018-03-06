@@ -76,7 +76,7 @@ void Reconstructor::initialize()
 	//Decide if using the color models from file. (True: use CMs from the file "colormodel.txt")
 	// By setting false && press key "k" each frame, it trigers a new offline color model building process. 
 	m_offline_ModelFromFile = true;
-
+	m_count = 0;
 
 	// Cube dimensions from [(-m_height, m_height), (-m_height, m_height), (0, m_height)]
 	const int xL = -m_height;
@@ -230,7 +230,14 @@ void Reconstructor::onlineCMsBuild() {
 	CreateCMsOnline();
 	//Update the group lable of each voxel by mapping result
 	MappingUpdate();
-
+	/*
+	if (m_count == 10) {
+		//Save Trajectories into image
+		ShowTrajectories();
+		m_count = 0 ;
+	}
+	m_count++;
+	*/
 }
 
 
@@ -408,9 +415,7 @@ void Reconstructor::kmean() {
 	for (int k = 0; k < centers.rows; k++) {
 		Point2f tmp = Point2f(centers.at<float>(k, 0), centers.at<float>(k, 1));
 		m_centers.push_back(tmp);
-		if (m_offline_flag == true) {
-			m_Trajectories[k].push_back(tmp); //should be modified after mapping
-		}
+		
 	}
 
 	//writeCSV("xy.csv", data);
@@ -577,7 +582,6 @@ create Mat based on vector<uchar>
 http://answers.opencv.org/question/81831/convert-stdvectordouble-to-mat-and-show-the-image/
 
 */
-//const vector<Mat>&
 void Reconstructor::QueryPixelsByGroup(int groupNum, int cameraNo, vector<Mat>& bgr_planes, vector<Mat>& img_masks) {
 	//vector<Mat> bgr_planes;
 	vector<uchar> bvec0, gvec0, rvec0;
@@ -670,7 +674,7 @@ void Reconstructor::GenHistogramImg(vector<Mat> colorModel,Mat& histImageout) {
 }
 
 /*
-Calculate the similarity between all color models. e.g. 4 CMs -> 6 combinations.
+Calculate the similarity between input color models. e.g. 4 CMs -> 6 combinations.
 https://docs.opencv.org/2.4/doc/tutorials/imgproc/histograms/histogram_comparison/histogram_comparison.html
 */
 
@@ -705,18 +709,19 @@ void Reconstructor::CompareColorModels(vector<vector<Mat>>& cms) {
 				int cx1 = snprintf(buffer1, 100, "(%d %d): %.2f , %.2F, %.2f, %.2f", i,j, metric1_cor, metric2_cor, metric3_cor, avg_cor);
 				int cx2 = snprintf(buffer2, 100, "(%d %d): %.2f , %.2F, %.2f, %.2f", i, j, metric1_chi, metric2_chi, metric3_chi, avg_chi);
 
-				cout << "Correlation:" << buffer1 << endl;
-				cout << "ChiSqr:" << buffer2 << endl;
+				//cout << "Correlation:" << buffer1 << endl;
+			//	cout << "ChiSqr:" << buffer2 << endl;
 		
 		}
 	}
+	/*
 	cout << "--Correlation--" << endl;
 	cout << "H similarity:" << distance(metrics_cor.begin(), max_element(metrics_cor.begin(), metrics_cor.end())) << endl;
 	cout << "L similarity:" << distance(metrics_cor.begin(), min_element(metrics_cor.begin(), metrics_cor.end())) << endl;
 	cout << "--ChiSqr--" << endl;
 	cout << "H similarity:" << distance(metrics_chi.begin(), min_element(metrics_chi.begin(), metrics_chi.end())) << endl;
 	cout << "L similarity:" << distance(metrics_chi.begin(), max_element(metrics_chi.begin(), metrics_chi.end())) << endl;
-
+	*/
 }
 /**
 * Compare online four models v.s. single offline model 
@@ -763,8 +768,8 @@ int Reconstructor::CompareColorModels_Online(vector<vector<Mat>>& cms, vector<Ma
 			int cx1 = snprintf(buffer1, 100, "(%d ): %.2f , %.2F, %.2f, %.2f", i, metric1_cor, metric2_cor, metric3_cor, avg_cor);
 			int cx2 = snprintf(buffer2, 100, "(%d ): %.2f , %.2F, %.2f, %.2f", i, metric1_chi, metric2_chi, metric3_chi, avg_chi);
 
-			cout << "Correlation:" << buffer1 << endl;
-			cout << "ChiSqr:" << buffer2 << endl;
+		//	cout << "Correlation:" << buffer1 << endl;
+		//	cout << "ChiSqr:" << buffer2 << endl;
 
 	}
 	int hcor, hsqr, lcor, lsqr;
@@ -772,7 +777,7 @@ int Reconstructor::CompareColorModels_Online(vector<vector<Mat>>& cms, vector<Ma
 	lcor = distance(metrics_cor.begin(), min_element(metrics_cor.begin(), metrics_cor.end()));
 	hsqr = distance(metrics_chi.begin(), max_element(metrics_chi.begin(), metrics_chi.end()));
 	lsqr = distance(metrics_chi.begin(), min_element(metrics_chi.begin(), metrics_chi.end()));
-
+	/*
 	cout << "--Correlation--" << endl;
 	cout << "H similarity:" << hcor << endl;
 	cout << "L similarity:" << lcor << endl;
@@ -780,12 +785,52 @@ int Reconstructor::CompareColorModels_Online(vector<vector<Mat>>& cms, vector<Ma
 	cout << "--ChiSqr--" << endl;
 	cout << "L similarity:" << hsqr << endl;
 	cout << "H similarity:" << lsqr << endl;
-
+	*/
 	metrics.push_back(metrics_chi[lsqr]);
 	// Though we build both correlation & chisur, but now we only use chisqr.
 	return lsqr; 
 
 }
+
+void Reconstructor::ShowTrajectories() {
+	const int xL = -m_height;
+	const int xR = m_height;
+	const int yL = -m_height;
+	const int yR = m_height;
+	Mat img(m_height*2, m_height*2, CV_8UC3, Scalar(255,255 ,255));
+	
+	for (int p = 0; p < m_Trajectories.size(); p++) {
+		for (int k = 0; k < m_Trajectories[p].size(); k++) {
+			Point2f pt = m_Trajectories[p][k];
+			pt.x = int(pt.x + m_height);
+			pt.y = int(pt.y + m_height);
+			Vec3b colorB (255,0,0);
+			Vec3b colorG(0,255, 0);
+			Vec3b colorR(0, 0, 255);
+			Vec3b colorGr(40, 40, 40);
+				if (p == 0) {
+					img.at<Vec3b>(pt)[0] = 255;
+				}else if (p == 1) {
+					img.at<Vec3b>(pt)[1] = 255;
+				}else if (p == 2) {
+					img.at<Vec3b>(pt)[2] = 255;
+				}else if (p == 3) {
+					img.at<Vec3b>(pt) = colorGr;
+				}
+			}
+		}
+	
+	//Save image
+
+	namedWindow("trajectory", CV_WINDOW_KEEPRATIO);
+	imshow("trajectory", img);
+	waitKey(10);
+	imwrite("trajectories.png", img);
+
+}
+
+
+
 /** Offline CMs construction
 
 

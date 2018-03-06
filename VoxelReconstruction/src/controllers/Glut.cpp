@@ -717,7 +717,7 @@ void Glut::update(
 		// If not paused move to the next frame
 		//scene3d.setCurrentFrame(scene3d.getCurrentFrame() + 1);
 		//To skip n frames
-		scene3d.setCurrentFrame(scene3d.getCurrentFrame() + 6);
+		scene3d.setCurrentFrame(scene3d.getCurrentFrame() + 4);
 	}
 	if (scene3d.getCurrentFrame() != scene3d.getPreviousFrame())
 	{
