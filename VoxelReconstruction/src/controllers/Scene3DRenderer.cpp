@@ -67,9 +67,9 @@ Scene3DRenderer::Scene3DRenderer(
 	m_current_frame = 0;
 	m_previous_frame = -1;
 
-	const int H = 0;
-	const int S = 15;
-	const int V = 71;
+	const int H = 14;
+	const int S = 6;
+	const int V = 59;
 	m_h_threshold = H;
 	m_ph_threshold = H;
 	m_s_threshold = S;
@@ -171,6 +171,20 @@ void Scene3DRenderer::processForeground(
 		Dilation(0, 0, foreground, 1, 1, 1);
 
 	}
+	else
+	{ //DV,DV,EV,EH,DH,DH,EV,DV for preprocessing for online frame
+		
+		Dilation(0, 0, foreground, 1, 1, 1);
+		Dilation(0, 0, foreground, 1, 1, 1);
+		Erosion(0, 0, foreground, 1, 1, 1);
+		Erosion(0, 0, foreground, 0, 1, 1);
+		Dilation(0, 0, foreground, 0, 1, 1);
+		Dilation(0, 0, foreground, 0, 1, 1);
+		Erosion(0, 0, foreground, 1, 1, 1);
+		Dilation(0, 0, foreground, 1, 1, 1);
+	}
+
+
 
 
 

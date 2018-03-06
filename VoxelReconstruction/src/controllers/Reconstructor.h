@@ -68,12 +68,12 @@ public:
 
 	//[Clustering & Building color models & Similarity ]
 	void kmean();						//clustering voxels 
-	void CreateColorModel();			//Create color model for each person for each view
+	void CreateCMsOnline();		     	//Create color model for each person for each view
 	void QueryPixelsByGroup(int, int, vector<Mat>&, vector<Mat>&); 
 	void GenColorModel(vector<Mat>&, vector<Mat>&); 
 	void GenHistogramImg(vector<Mat>, Mat&);	//Generate single 3-ch Histogram image. 
 	void CompareColorModels(vector<vector<Mat>>&); // Given color models, it calculate the similarity of each possible pair.
-	int CompareColorModels_Online(vector<vector<Mat>>&, vector<Mat>);
+	int CompareColorModels_Online(vector<vector<Mat>>&, vector<Mat>, vector<double>&, bool);
 	//[Offline]
 	void offlineCMsBuild();				// step by step, to build the offline color models
 	void CreateCMsOffline();		    // Loop each view of camera, user has to pick up best color model for each person. The result is saved into a file. 
@@ -89,6 +89,11 @@ public:
 
 	bool getOfflineFlagFromeFile() const {
 		return m_offline_ModelFromFile;
+	}
+
+	void resetOfflineFlag()
+	{
+		m_offline_flag = false;
 	}
 
 	void setOfflineFlag()

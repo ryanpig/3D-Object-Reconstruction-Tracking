@@ -32,7 +32,7 @@ namespace nl_uu_science_gmt
 Reconstructor::Reconstructor(
 		const vector<Camera*> &cs) :
 				m_cameras(cs),
-				m_height(2048), //2048
+				m_height(2048), //3076
 				m_step(64) //32
 {
 	for (size_t c = 0; c < m_cameras.size(); ++c)
@@ -73,7 +73,8 @@ void Reconstructor::initialize()
 	m_Trajectories.resize(4);
 	//Initialize once offline color model building process flag.  
 	m_offline_flag = false; 
-	//Decide if using the color models from file. (True: use CMs from the file)
+	//Decide if using the color models from file. (True: use CMs from the file "colormodel.txt")
+	// By setting false && press key "k" each frame, it trigers a new offline color model building process. 
 	m_offline_ModelFromFile = true;
 
 
@@ -226,9 +227,9 @@ void Reconstructor::onlineCMsBuild() {
 	//Clustering 
 	kmean();
 	//Build Colod models based on a single frame in different views. 
-	CreateColorModel();
-	
-
+	CreateCMsOnline();
+	//Update the group lable of each voxel by mapping result
+	MappingUpdate();
 
 }
 
@@ -580,9 +581,9 @@ void Reconstructor::kmean() {
 /**
 * 1.Create color model for each person in each camera
 * 2.Compare four color models with offline models 
-* 3.Update voxel based on the mapping table 
+* 
 */
-void Reconstructor::CreateColorModel() {
+void Reconstructor::CreateCMsOnline() {
 	//Set the frame to be processed. (Now, the frame is based on when we press key "k")
 	
 	vector<Mat> allImgs, allImgMasks;
@@ -590,37 +591,23 @@ void Reconstructor::CreateColorModel() {
 	vector<Mat> img_masks;
 	vector<int> compare_result;
 	vector<int> duplicate;
-	m_mapping.clear();
 
+	m_mapping.clear();
+	vector<double> metrics_person;
 	//Each camera View 
 	for (int p = 0; p < m_colorModels.size(); p++) {
 
 		compare_result.clear();
-
+		vector<double> metrics;
 		for (int m = 0; m < m_cameras.size(); m++) {
 			cout << "Camera View:" << m << endl;
-			//Each person
 			//Build BGR matrix by querying pixels, based on grouping number
 			vector<Mat> bgr_planes0, bgr_planes1, bgr_planes2, bgr_planes3;
 			QueryPixelsByGroup(0, m, bgr_planes0, img_masks);  //group 0 , camera m 
 			QueryPixelsByGroup(1, m, bgr_planes1, img_masks);
 			QueryPixelsByGroup(2, m, bgr_planes2, img_masks);
 			QueryPixelsByGroup(3, m, bgr_planes3, img_masks);
-			//Projecting clustering voxels onto pixels (img_masks), then showing them by each camera view. 
-		/*
-			Mat LImg_mask, RImg_mask, tmp_mask, tmp_mask_v;
-			hconcat(img_masks[0], img_masks[1], LImg_mask);
-			hconcat(img_masks[2], img_masks[3], RImg_mask);
-			allImgMasks.push_back(LImg_mask);
-			allImgMasks.push_back(RImg_mask);
-			vconcat(allImgMasks, tmp_mask_v);
-			imshow("four masks", tmp_mask_v);
-			waitKey(0);
-			*/
-			img_masks.clear();
 			allImgMasks.clear();
-			
-
 			//Calculate ColorHistogram
 			vector<Mat> colorModel0, colorModel1, colorModel2, colorModel3;
 			GenColorModel(bgr_planes0, colorModel0);
@@ -628,7 +615,8 @@ void Reconstructor::CreateColorModel() {
 			GenColorModel(bgr_planes2, colorModel2);
 			GenColorModel(bgr_planes3, colorModel3);
 			Mat histImage0, histImage1, histImage2, histImage3;
-			// Display Color Histograms
+			//(opt) Display Color Histograms 
+			
 			GenHistogramImg(colorModel0, histImage0);
 			GenHistogramImg(colorModel1, histImage1);
 			GenHistogramImg(colorModel2, histImage2);
@@ -638,58 +626,75 @@ void Reconstructor::CreateColorModel() {
 			hconcat(histImage2, histImage3, RImg);
 			hconcat(LImg, RImg, allImg_tmp);
 			allImgs.push_back(allImg_tmp);
-
+			
 			//Histogram Comparison
-			vector<double> metric;
+			//Compare four new online color models to one offline color model
 			vector<vector<Mat>> colorModels;
 			colorModels.push_back(colorModel0);
 			colorModels.push_back(colorModel1);
 			colorModels.push_back(colorModel2);
 			colorModels.push_back(colorModel3);
-			//Compare four new generated color models to one offline color model
-			int highest_similar = CompareColorModels_Online(colorModels, m_colorModels[p]);
+			// If offline color model is for blue man, we only compare blue channel. 
+			int highest_similar;
+			if (p == 0) { 
+				highest_similar = CompareColorModels_Online(colorModels, m_colorModels[p], metrics, true);
+			}else {
+				highest_similar = CompareColorModels_Online(colorModels, m_colorModels[p], metrics, false);
+			}
+			
 			compare_result.push_back(highest_similar); //e.g. 0~3
-
 			//build offline version color models
 		}
 		
+		// ---- Color comparison Start ----
 		//Vote to decide which color model is highly similar to the offline color model belonging a single person.  
-		// black -> grey -> color -> blue
-		vector<int> countArr;
-		//counting how many times of getting highest similarity for each clustering group.
-		countArr.push_back(count(compare_result.begin(), compare_result.end(), 0));
-		countArr.push_back(count(compare_result.begin(), compare_result.end(), 1));
-		countArr.push_back(count(compare_result.begin(), compare_result.end(), 2));
-		countArr.push_back(count(compare_result.begin(), compare_result.end(), 3));
-		//decide the mapping if one group gets highest counts. 
-		int groupNo = distance(countArr.begin(), max_element(countArr.begin(), countArr.end()));
+		// Blue -> Grey -> Color -> Black
+		
+		
+		// Find max metric from the highest similarity of each camera view against single offline CM 
+		int camNo = distance(metrics.begin(), min_element(metrics.begin(), metrics.end()));
+		int groupNo = compare_result[camNo];
+		double bestMetric = metrics[camNo];
 
 		cout << "The most similar to the offline model " << p << "is group no" << groupNo << endl;
-		for (int y = 0; y < 4; y++)
-		{
-			std::cout << y << " appears " << countArr[y] << " times.\n";
-		}
+
 		int check_exist = count(m_mapping.begin(), m_mapping.end(), groupNo);
-		if (check_exist == 0)
+		//Save the result to the mapping table
+		if (check_exist == 0) {
 			m_mapping.push_back(groupNo);
+			metrics_person.push_back(bestMetric);
+		}
 		else {
-			//if mapping to same group, try to find non-assigned group number.
-			for (int k = 0; k < 4; k++) {
-				int check_ex = count(m_mapping.begin(), m_mapping.end(), k);
-				if (check_ex == 0)
-				{
-					m_mapping.push_back(k);
-					break;
+			//if mapping to same group, compare the best metric to decide the position. 
+			ptrdiff_t pos = distance(m_mapping.begin(),find(m_mapping.begin(), m_mapping.end(), groupNo));
+			if (metrics_person[pos] <= bestMetric) {
+				for (int k = 0; k < 4; k++) { // find available assignment
+					int check_ex = count(m_mapping.begin(), m_mapping.end(), k);
+					if (check_ex == 0)
+					{
+						m_mapping.push_back(k);
+						metrics_person.push_back(bestMetric);
+						break;
+					}
 				}
 			}
-//			duplicate.push_back(groupNo);
+			else { //best metric is better than existing metric.
+				m_mapping.push_back(groupNo);
+				metrics_person.push_back(bestMetric);
+				for (int k = 0; k < 4; k++) { // find available 
+					int check_ex = count(m_mapping.begin(), m_mapping.end(), k);
+					if (check_ex == 0)
+					{
+						//Reassign group no.  
+						m_mapping.at(pos) = k;
+						break;
+					}
+				}
+
+			}
 		}
 
 	}
-
-	//Update the group lable of each voxel by mapping result
-	MappingUpdate();
-
 	/*
 	vconcat(allImgs, displayImg);
 	namedWindow("Color Histograms", CV_WINDOW_NORMAL);
@@ -701,15 +706,22 @@ void Reconstructor::CreateColorModel() {
 }
 
 /**
- * update voxel label by new mapping table. 
+ * update voxel label by mapping table. 
+ * update trajectories with clustering centers based on mapping table 
 **/
 void Reconstructor::MappingUpdate() {
 	for (int k = 0; k < m_mapping.size(); k++) {
+		int mapNo = m_mapping[k]; //get mapped number.
+		//update group label of each voxel
 		for (int j = 0; j < m_visible_voxels.size(); j++) {
 			Voxel* voxel = m_visible_voxels[j];
-			if (voxel->group_number == m_mapping[k]) {
+			if (voxel->group_number == mapNo) {
 				voxel->group_number = k;
 			}
+		}
+		//update trajectories
+		if (m_offline_flag == true) {
+			m_Trajectories[k].push_back(m_centers[mapNo]); 
 		}
 	}
 }
@@ -868,7 +880,7 @@ void Reconstructor::CompareColorModels(vector<vector<Mat>>& cms) {
 * Output: highest index of CMs. 
 **/
 
-int Reconstructor::CompareColorModels_Online(vector<vector<Mat>>& cms, vector<Mat> cmoff) {
+int Reconstructor::CompareColorModels_Online(vector<vector<Mat>>& cms, vector<Mat> cmoff, vector<double>& metrics,bool onlyBlue) {
 	//Normalization
 	for (int k = 0; k < cms.size(); k++) {
 		for (int j = 0; j < cms[0].size(); j++) {
@@ -893,6 +905,12 @@ int Reconstructor::CompareColorModels_Online(vector<vector<Mat>>& cms, vector<Ma
 
 			double avg_cor = (metric1_cor + metric2_cor + metric3_cor) / 3;
 			double avg_chi = (metric1_chi + metric2_chi + metric3_chi) / 3;
+			//Only compare Blue channel for Blue guy
+			if (onlyBlue == true) { 
+				avg_cor = metric1_cor;
+				avg_chi = metric1_chi;
+			}
+
 			metrics_cor.push_back(avg_cor);
 			metrics_chi.push_back(avg_chi);
 
@@ -914,11 +932,14 @@ int Reconstructor::CompareColorModels_Online(vector<vector<Mat>>& cms, vector<Ma
 	cout << "--Correlation--" << endl;
 	cout << "H similarity:" << hcor << endl;
 	cout << "L similarity:" << lcor << endl;
+	//Remember lsqr means high similarity
 	cout << "--ChiSqr--" << endl;
-	cout << "H similarity:" << hsqr << endl;
-	cout << "L similarity:" << lsqr << endl;
+	cout << "L similarity:" << hsqr << endl;
+	cout << "H similarity:" << lsqr << endl;
 
-	return hsqr; 
+	metrics.push_back(metrics_chi[lsqr]);
+	// Though we build both correlation & chisur, but now we only use chisqr.
+	return lsqr; 
 
 }
 /** Offline CMs construction
