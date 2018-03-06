@@ -342,7 +342,9 @@ void Glut::keyboard(
 		}
 		else if (key == 'k') {
 			//scene3d.getReconstructor().kmean();
-			scene3d.getReconstructor().CreateColorModel();
+			//scene3d.getReconstructor().CreateColorModel();
+			scene3d.getReconstructor().resetOfflineFlag(); // to enter offline color model building process.
+
 
 		
 		}
@@ -682,7 +684,7 @@ void Glut::update(
 			scene3d.getReconstructor().setOfflineFlag();
 		}
 		else { 
-			scene3d.setCurrentFrame(0); // Pick up a frame to build the color models
+			//scene3d.setCurrentFrame(0); // Pick up a frame to build the color models
 			scene3d.processFrame();
 			scene3d.getReconstructor().update();
 			scene3d.getReconstructor().offlineCMsBuild();
@@ -713,7 +715,9 @@ void Glut::update(
 	if (!scene3d.isPaused())
 	{
 		// If not paused move to the next frame
-		scene3d.setCurrentFrame(scene3d.getCurrentFrame() + 1);
+		//scene3d.setCurrentFrame(scene3d.getCurrentFrame() + 1);
+		//To skip n frames
+		scene3d.setCurrentFrame(scene3d.getCurrentFrame() + 6);
 	}
 	if (scene3d.getCurrentFrame() != scene3d.getPreviousFrame())
 	{
@@ -725,8 +729,8 @@ void Glut::update(
 
 		scene3d.setPreviousFrame(scene3d.getCurrentFrame());
 		
-		//To skip 10 frames
-		scene3d.setCurrentFrame(scene3d.getCurrentFrame() + 9);
+
+	
 
 	}
 	else if (scene3d.getHThreshold() != scene3d.getPHThreshold() || scene3d.getSThreshold() != scene3d.getPSThreshold()
@@ -759,7 +763,7 @@ void Glut::update(
 		canvas = scene3d.getCameras()[scene3d.getPreviousCamera()]->getFrame();
 		foreground = scene3d.getCameras()[scene3d.getPreviousCamera()]->getForegroundImage();
 	}
-	// Show four frames in the windows.  (Pick up frame)
+	// Show four frames in the windows.  for Pick up frame
 	/*
 	Mat f1, f2, f3, f4;
 	Mat tmp1, tmp2;
@@ -1010,7 +1014,7 @@ void Glut::drawVoxels()
 
 		if (voxels[v]->group_number == 0)
 			glColor4f(0.5f, 0.2f, 0.8f, 0.5f);
-		else if(voxels[v]->group_number == 1)
+		else if (voxels[v]->group_number == 1)
 			glColor4f(1.0f, 0.0f, 0.0f, 0.5f);
 		else if (voxels[v]->group_number == 2)
 			glColor4f(0.0f, 1.0f, 0.0f, 0.5f);
@@ -1038,7 +1042,7 @@ void Glut::drawTrajectories()
 
 	// apply default translation
 	glTranslatef(0, 0, 0);
-	glPointSize(8.0f); // 2.0f
+	glPointSize(4.0f); // 2.0f
 	glBegin(GL_POINTS);
 
 	vector<vector<Point2f>> Traj = m_Glut->getScene3d().getReconstructor().getTrajectories();
@@ -1049,14 +1053,14 @@ void Glut::drawTrajectories()
 	{
 		//glColor4f(0.5f, 0.5f, 0.5f, 0.5f);
 
-		if (v == 0 ) //black man
-			glColor4f(0.1f, 0.1f, 0.1f, 1.0f);
-		else if (v == 1) //color man
-			glColor4f(0.3f, 0.7f, 0.7f, 1.0f);
-		else if (v == 2) //grey man
-			glColor4f(0.3f, 0.3f, 0.3f, 0.8f);
-		else if (v== 3) //blue man
-			glColor4f(1.0f, 0.2f, 0.2f, 0.8f);
+		if (v == 0 ) //Blue
+			glColor4f(0.0f, 0.0f, 1.0f, 1.0f);
+		else if (v == 1) //Grey
+			glColor4f(0.0f, 1.0f, 0.0f, 1.0f);
+		else if (v == 2) //Color
+			glColor4f(1.0f, 0.0f, 0.0f, 1.0f);
+		else if (v== 3) //Black
+			glColor4f(0.2f, 0.2f, 0.2f, 1.0f);
 
 		for (size_t k = 0; k < Traj[v].size(); k++) {
 			glVertex3f((GLfloat)Traj[v][k].x, (GLfloat)Traj[v][k].y, (GLfloat) 0.0f);
