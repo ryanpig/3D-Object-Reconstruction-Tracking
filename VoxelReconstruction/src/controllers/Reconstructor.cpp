@@ -32,7 +32,7 @@ Reconstructor::Reconstructor(
 		const vector<Camera*> &cs) :
 				m_cameras(cs),
 				m_height(2048),
-				m_step(32)
+				m_step(64)
 {
 	for (size_t c = 0; c < m_cameras.size(); ++c)
 	{
@@ -220,9 +220,38 @@ void Reconstructor::kmean() {
 	criteria.epsilon = 0.1;
 	criteria.maxCount = 1000;
 	criteria.type = criteria.EPS;
-	int attempts = 3;
-	int flags = KMEANS_RANDOM_CENTERS;
-	kmeans( data, 4, bestLabels, criteria, attempts, flags, centers);
+	bool centersfound = false;
+	int attempts = 3; //1;
+	int maxRetries = 3;
+	int flags = KMEANS_RANDOM_CENTERS; //KMEANS_PP_CENTERS;//
+	std::vector<cv::Point2f> centerStorage;
+	int* centerVoxelCountStorage;
+
+	/*
+	//!!!execute kmeans a couple of times to find clusters and assess how small they are
+	for (int retries = 0; retries < maxRetries; retries++)
+	{
+		//for now assume we can find 2
+		kmeans(data, 2, bestLabels, criteria, attempts, flags, centers);
+
+		//calculate amount of voxels withing range r (label them!)
+		for (int j = 0; j < m_visible_voxels.size(); j++) {
+			//calculate distance between voxel and its best center
+			//if distance > X, set best label to -1 (or 5 or something)
+			//else, +1 the counter of this center
+		}
+		for (int k = 0; k < centers.rows; k++) {
+			//dismiss centers with #voxels < V
+			//if two centers are within range 2*X of each other, delete the one with the least voxels
+			
+			//compare centers to currently stored centers, if two are too close, replace the existing stored voxel if the new one has more voxels
+			//store remaining centers and how much voxels are within their range
+		}
+	}
+	*/
+	//With the remaining centers, calculate their voxels again, then finish up
+
+	//kmeans(data, 4, bestLabels, criteria, attempts, flags, centers);
 
 	//label each voxel 
 	for (int j = 0; j < m_visible_voxels.size(); j++) {
